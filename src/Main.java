@@ -121,6 +121,13 @@ public class Main {
             return inventory.get(roomNumber);
         }
 
+        public void restoreRoom(String roomNumber) {
+            Room room = inventory.get(roomNumber);
+            if (room != null) {
+                room.setAvailable(true);
+            }
+        }
+
         public void displayAvailableRooms() {
             System.out.println("------------------------------------------------------------");
             System.out.printf("%-8s %-10s %-15s %-15s%n",
@@ -215,8 +222,6 @@ public class Main {
 
         public Reservation confirmBooking(String guestName, String roomNumber, int nights)
                 throws IllegalArgumentException {
-
-            // Validate inputs
             InputValidator.validateGuestName(guestName);
             InputValidator.validateNights(nights);
             InputValidator.validateRoomNumber(roomNumber);
@@ -256,31 +261,93 @@ public class Main {
         }
     }
 
+    // ── CancellationService class ──────────────────
+    static class CancellationService {
+        private BookingService bookingService;
+        private RoomInventory inventory;
+        private List<String> cancellationLog;
+
+        public CancellationService(BookingService bookingService, RoomInventory inventory) {
+            this.bookingService  = bookingService;
+            this.inventory       = inventory;
+            this.cancellationLog = new ArrayList<>();
+        }
+
+        public void cancelReservation(String reservationId) throws IllegalArgumentException {
+
+            Reservation reservation = bookingService.getReservation(reservationId);
+
+            if (reservation == null) {
+                throw new IllegalArgumentException("Reservation " + reservationId + " not found.");
+            }
+
+            if (reservation.getStatus().equals("CANCELLED")) {
+                throw new IllegalArgumentException("Reservation " + reservationId + " is already cancelled.");
+            }
+
+            // Update status
+            reservation.setStatus("CANCELLED");
+
+            // Restore room to inventory
+            inventory.restoreRoom(reservation.getAssignedRoom().getRoomNumber());
+
+            // Log cancellation
+            String log = "Cancelled: " + reservationId +
+                    " | Guest: " + reservation.getGuestName() +
+                    " | Room: " + reservation.getAssignedRoom().getRoomNumber();
+            cancellationLog.add(log);
+
+            System.out.println("\n  Cancellation Successful!");
+            System.out.println("--------------------------------------------");
+            System.out.println(reservation);
+            System.out.println("--------------------------------------------");
+            System.out.println("  Room " + reservation.getAssignedRoom().getRoomNumber() +
+                    " is now available again.");
+        }
+
+        public void displayCancellationLog() {
+            System.out.println("\n--- Cancellation Log ---");
+            System.out.println("------------------------------------------------------------");
+            if (cancellationLog.isEmpty()) {
+                System.out.println("  No cancellations recorded.");
+            } else {
+                for (String log : cancellationLog) {
+                    System.out.println("  " + log);
+                }
+            }
+            System.out.println("------------------------------------------------------------");
+        }
+    }
+
     // ── Main Method ────────────────────────────────
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC9 - Error Handling & Validation        ");
+        System.out.println("   UC10 - Booking Cancellation &            ");
+        System.out.println("          Inventory Rollback                ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory       = new RoomInventory();
-        BookingService bookingService = new BookingService(inventory);
+        RoomInventory inventory            = new RoomInventory();
+        BookingService bookingService      = new BookingService(inventory);
+        CancellationService cancelService  = new CancellationService(bookingService, inventory);
 
         boolean running = true;
         while (running) {
             System.out.println("\n--- Main Menu ---");
             System.out.println("1. View Available Rooms");
             System.out.println("2. Make a Booking");
-            System.out.println("3. View All Reservations");
-            System.out.println("4. Exit");
+            System.out.println("3. Cancel a Booking");
+            System.out.println("4. View All Reservations");
+            System.out.println("5. View Cancellation Log");
+            System.out.println("6. Exit");
             System.out.print("Enter your choice: ");
 
             try {
                 int choice = Integer.parseInt(scanner.nextLine().trim());
-                InputValidator.validateMenuChoice(choice, 1, 4);
+                InputValidator.validateMenuChoice(choice, 1, 6);
 
                 switch (choice) {
                     case 1:
@@ -317,11 +384,25 @@ public class Main {
                         break;
 
                     case 3:
+                        System.out.print("Enter Reservation ID to Cancel: ");
+                        String resId = scanner.nextLine();
+                        try {
+                            cancelService.cancelReservation(resId);
+                        } catch (IllegalArgumentException e) {
+                            System.out.println("  ERROR: " + e.getMessage());
+                        }
+                        break;
+
+                    case 4:
                         System.out.println("\n--- All Reservations ---");
                         bookingService.displayAllReservations();
                         break;
 
-                    case 4:
+                    case 5:
+                        cancelService.displayCancellationLog();
+                        break;
+
+                    case 6:
                         System.out.println("\n  Thank you for using Book My Stay!");
                         System.out.println("============================================");
                         running = false;
