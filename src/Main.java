@@ -107,6 +107,7 @@ public class Main {
         private int numberOfNights;
         private List<AddOnService> addOns;
         private double totalCost;
+        private String status; // CONFIRMED, CANCELLED
 
         public Reservation(String guestName, Room room, int numberOfNights) {
             this.reservationId  = "RES" + (++counter);
@@ -115,11 +116,15 @@ public class Main {
             this.numberOfNights = numberOfNights;
             this.addOns         = new ArrayList<>();
             this.totalCost      = numberOfNights * room.getPricePerNight();
+            this.status         = "CONFIRMED";
         }
 
         public String getReservationId() { return reservationId; }
         public String getGuestName()     { return guestName; }
         public Room getAssignedRoom()    { return assignedRoom; }
+        public int getNumberOfNights()   { return numberOfNights; }
+        public String getStatus()        { return status; }
+        public void setStatus(String status) { this.status = status; }
 
         public void addService(AddOnService service) {
             addOns.add(service);
@@ -138,8 +143,7 @@ public class Main {
                             "  Room Type      : %s%n" +
                             "  Nights         : %d%n" +
                             "  Price/Night    : Rs.%.0f%n",
-                    reservationId,
-                    guestName,
+                    reservationId, guestName,
                     assignedRoom.getRoomNumber(),
                     assignedRoom.getRoomType(),
                     numberOfNights,
@@ -155,7 +159,10 @@ public class Main {
                 sb.append("  Add-On Services : None\n");
             }
 
-            sb.append(String.format("  Total Cost     : Rs.%.0f", totalCost));
+            sb.append(String.format(
+                    "  Total Cost     : Rs.%.0f%n" +
+                            "  Status         : %s",
+                    totalCost, status));
             return sb.toString();
         }
     }
@@ -198,6 +205,10 @@ public class Main {
             return reservations.get(reservationId);
         }
 
+        public Map<String, Reservation> getAllReservations() {
+            return reservations;
+        }
+
         public void displayAllReservations() {
             if (reservations.isEmpty()) {
                 System.out.println("  No reservations found.");
@@ -211,31 +222,71 @@ public class Main {
         }
     }
 
-    // ── AddOnServiceManager class ──────────────────
-    static class AddOnServiceManager {
+    // ── BookingReportService class ─────────────────
+    static class BookingReportService {
+        private BookingService bookingService;
 
-        public void displayAvailableServices() {
-            System.out.println("------------------------------------------------------------");
-            System.out.printf("%-5s %-25s %-10s%n", "No.", "Service", "Price");
-            System.out.println("------------------------------------------------------------");
-            int i = 1;
-            for (AddOnService s : AddOnService.values()) {
-                System.out.printf("%-5d %-25s Rs.%.0f%n", i++, s.getDisplayName(), s.getPrice());
-            }
-            System.out.println("------------------------------------------------------------");
+        public BookingReportService(BookingService bookingService) {
+            this.bookingService = bookingService;
         }
 
-        public void addServiceToReservation(Reservation reservation, int choice) {
-            AddOnService[] services = AddOnService.values();
-            if (choice < 1 || choice > services.length) {
-                System.out.println("  ERROR: Invalid service choice.");
+        public void generateFullReport() {
+            Map<String, Reservation> reservations = bookingService.getAllReservations();
+
+            System.out.println("============================================");
+            System.out.println("         BOOKING HISTORY & REPORT          ");
+            System.out.println("============================================");
+
+            if (reservations.isEmpty()) {
+                System.out.println("  No booking records found.");
                 return;
             }
-            AddOnService selected = services[choice - 1];
-            reservation.addService(selected);
-            System.out.println("  Added: " + selected.getDisplayName() +
-                    " (Rs." + selected.getPrice() + ") to " +
-                    reservation.getReservationId());
+
+            int totalBookings    = 0;
+            int confirmed        = 0;
+            int cancelled        = 0;
+            double totalRevenue  = 0;
+
+            for (Reservation r : reservations.values()) {
+                totalBookings++;
+                if (r.getStatus().equals("CONFIRMED")) {
+                    confirmed++;
+                    totalRevenue += r.getTotalCost();
+                } else {
+                    cancelled++;
+                }
+            }
+
+            System.out.println("------------------------------------------------------------");
+            System.out.printf("  %-25s : %d%n", "Total Bookings",   totalBookings);
+            System.out.printf("  %-25s : %d%n", "Confirmed",        confirmed);
+            System.out.printf("  %-25s : %d%n", "Cancelled",        cancelled);
+            System.out.printf("  %-25s : Rs.%.0f%n", "Total Revenue", totalRevenue);
+            System.out.println("------------------------------------------------------------");
+
+            System.out.println("\n  Booking Details:");
+            System.out.println("------------------------------------------------------------");
+            for (Reservation r : reservations.values()) {
+                System.out.println(r);
+                System.out.println("------------------------------------------------------------");
+            }
+        }
+
+        public void searchByGuestName(String name) {
+            System.out.println("\n--- Search Results for Guest: " + name + " ---");
+            System.out.println("------------------------------------------------------------");
+            boolean found = false;
+            for (Reservation r : bookingService.getAllReservations().values()) {
+                if (r.getGuestName().equalsIgnoreCase(name)) {
+                    System.out.println(r);
+                    System.out.println("------------------------------------------------------------");
+                    found = true;
+                }
+            }
+            if (!found) {
+                System.out.println("  No bookings found for guest: " + name);
+                System.out.println("------------------------------------------------------------");
+            }
         }
     }
 
@@ -245,22 +296,23 @@ public class Main {
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC7 - Add-On Service Selection           ");
+        System.out.println("   UC8 - Booking History & Reporting        ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory       = new RoomInventory();
-        BookingService bookingService = new BookingService(inventory);
-        AddOnServiceManager addOnMgr  = new AddOnServiceManager();
+        RoomInventory inventory          = new RoomInventory();
+        BookingService bookingService    = new BookingService(inventory);
+        BookingReportService reportService = new BookingReportService(bookingService);
 
         boolean running = true;
         while (running) {
             System.out.println("\n--- Main Menu ---");
             System.out.println("1. View Available Rooms");
             System.out.println("2. Make a Booking");
-            System.out.println("3. Add Services to Reservation");
-            System.out.println("4. View All Reservations");
-            System.out.println("5. Exit");
+            System.out.println("3. View All Reservations");
+            System.out.println("4. Generate Booking Report");
+            System.out.println("5. Search Booking by Guest Name");
+            System.out.println("6. Exit");
             System.out.print("Enter your choice: ");
 
             int choice = scanner.nextInt();
@@ -293,43 +345,21 @@ public class Main {
                     break;
 
                 case 3:
-                    System.out.print("Enter Reservation ID: ");
-                    String resId = scanner.nextLine();
-
-                    Reservation res = bookingService.getReservation(resId);
-                    if (res == null) {
-                        System.out.println("  ERROR: Reservation not found.");
-                        break;
-                    }
-
-                    boolean addingServices = true;
-                    while (addingServices) {
-                        System.out.println("\nAvailable Add-On Services:");
-                        addOnMgr.displayAvailableServices();
-                        System.out.println("0. Done adding services");
-                        System.out.print("Select service number: ");
-                        int serviceChoice = scanner.nextInt();
-                        scanner.nextLine();
-
-                        if (serviceChoice == 0) {
-                            addingServices = false;
-                        } else {
-                            addOnMgr.addServiceToReservation(res, serviceChoice);
-                        }
-                    }
-
-                    System.out.println("\nUpdated Reservation:");
-                    System.out.println("--------------------------------------------");
-                    System.out.println(res);
-                    System.out.println("--------------------------------------------");
-                    break;
-
-                case 4:
                     System.out.println("\n--- All Reservations ---");
                     bookingService.displayAllReservations();
                     break;
 
+                case 4:
+                    reportService.generateFullReport();
+                    break;
+
                 case 5:
+                    System.out.print("Enter Guest Name to Search: ");
+                    String searchName = scanner.nextLine();
+                    reportService.searchByGuestName(searchName);
+                    break;
+
+                case 6:
                     System.out.println("\n  Thank you for using Book My Stay!");
                     System.out.println("============================================");
                     running = false;
