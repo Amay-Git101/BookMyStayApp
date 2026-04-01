@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
 
@@ -33,7 +34,6 @@ public class Main {
 
     // ── InputValidator class ───────────────────────
     static class InputValidator {
-
         public static void validateGuestName(String name) throws IllegalArgumentException {
             if (name == null || name.trim().isEmpty()) {
                 throw new IllegalArgumentException("Guest name cannot be empty.");
@@ -123,9 +123,7 @@ public class Main {
 
         public void restoreRoom(String roomNumber) {
             Room room = inventory.get(roomNumber);
-            if (room != null) {
-                room.setAvailable(true);
-            }
+            if (room != null) room.setAvailable(true);
         }
 
         public void displayAvailableRooms() {
@@ -134,9 +132,7 @@ public class Main {
                     "Room No", "Type", "Price/Night", "Status");
             System.out.println("------------------------------------------------------------");
             for (Room room : inventory.values()) {
-                if (room.isAvailable()) {
-                    System.out.println(room);
-                }
+                if (room.isAvailable()) System.out.println(room);
             }
             System.out.println("------------------------------------------------------------");
         }
@@ -170,6 +166,7 @@ public class Main {
         public String getStatus()        { return status; }
         public void setStatus(String s)  { this.status = s; }
         public double getTotalCost()     { return totalCost; }
+        public List<AddOnService> getAddOns() { return addOns; }
 
         public void addService(AddOnService service) {
             addOns.add(service);
@@ -274,24 +271,18 @@ public class Main {
         }
 
         public void cancelReservation(String reservationId) throws IllegalArgumentException {
-
             Reservation reservation = bookingService.getReservation(reservationId);
 
             if (reservation == null) {
                 throw new IllegalArgumentException("Reservation " + reservationId + " not found.");
             }
-
             if (reservation.getStatus().equals("CANCELLED")) {
                 throw new IllegalArgumentException("Reservation " + reservationId + " is already cancelled.");
             }
 
-            // Update status
             reservation.setStatus("CANCELLED");
-
-            // Restore room to inventory
             inventory.restoreRoom(reservation.getAssignedRoom().getRoomNumber());
 
-            // Log cancellation
             String log = "Cancelled: " + reservationId +
                     " | Guest: " + reservation.getGuestName() +
                     " | Room: " + reservation.getAssignedRoom().getRoomNumber();
@@ -304,35 +295,60 @@ public class Main {
             System.out.println("  Room " + reservation.getAssignedRoom().getRoomNumber() +
                     " is now available again.");
         }
+    }
 
-        public void displayCancellationLog() {
-            System.out.println("\n--- Cancellation Log ---");
-            System.out.println("------------------------------------------------------------");
-            if (cancellationLog.isEmpty()) {
-                System.out.println("  No cancellations recorded.");
-            } else {
-                for (String log : cancellationLog) {
-                    System.out.println("  " + log);
-                }
-            }
-            System.out.println("------------------------------------------------------------");
+    // ── BookingSimulator (Thread) class ───────────────
+    static class BookingSimulator extends Thread {
+        private BookingService bookingService;
+        private String guestName;
+        private String roomNumber;
+        private int nights;
+        private static AtomicInteger successCount = new AtomicInteger(0);
+        private static AtomicInteger failCount    = new AtomicInteger(0);
+
+        public BookingSimulator(BookingService bookingService,
+                                String guestName, String roomNumber, int nights) {
+            this.bookingService = bookingService;
+            this.guestName      = guestName;
+            this.roomNumber     = roomNumber;
+            this.nights         = nights;
         }
+
+        @Override
+        public void run() {
+            try {
+                synchronized (bookingService) {
+                    Reservation reservation = bookingService.confirmBooking(guestName, roomNumber, nights);
+                    if (reservation != null) {
+                        successCount.incrementAndGet();
+                        System.out.println("  [SUCCESS] Booking confirmed for " +
+                                guestName + " | " + reservation.getReservationId());
+                    }
+                }
+            } catch (IllegalArgumentException e) {
+                failCount.incrementAndGet();
+                System.out.println("  [FAILED]  Booking failed for " +
+                        guestName + " - " + e.getMessage());
+            }
+        }
+
+        public static int getSuccessCount() { return successCount.get(); }
+        public static int getFailCount()    { return failCount.get(); }
     }
 
     // ── Main Method ────────────────────────────────
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC10 - Booking Cancellation &            ");
-        System.out.println("          Inventory Rollback                ");
+        System.out.println("   UC11 - Concurrent Booking Simulation     ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory            = new RoomInventory();
-        BookingService bookingService      = new BookingService(inventory);
-        CancellationService cancelService  = new CancellationService(bookingService, inventory);
+        RoomInventory inventory           = new RoomInventory();
+        BookingService bookingService     = new BookingService(inventory);
+        CancellationService cancelService = new CancellationService(bookingService, inventory);
 
         boolean running = true;
         while (running) {
@@ -341,7 +357,7 @@ public class Main {
             System.out.println("2. Make a Booking");
             System.out.println("3. Cancel a Booking");
             System.out.println("4. View All Reservations");
-            System.out.println("5. View Cancellation Log");
+            System.out.println("5. Run Concurrent Booking Simulation");
             System.out.println("6. Exit");
             System.out.print("Enter your choice: ");
 
@@ -399,7 +415,26 @@ public class Main {
                         break;
 
                     case 5:
-                        cancelService.displayCancellationLog();
+                        System.out.println("\n--- Running Concurrent Booking Simulation ---");
+                        System.out.println("  Simulating 5 guests booking Room 201 simultaneously...");
+                        System.out.println("------------------------------------------------------------");
+
+                        List<Thread> threads = new ArrayList<>();
+                        String[] guests = {"Alice", "Bob", "Charlie", "Diana", "Eve"};
+
+                        for (String guest : guests) {
+                            Thread t = new BookingSimulator(bookingService, guest, "201", 2);
+                            threads.add(t);
+                        }
+
+                        for (Thread t : threads) t.start();
+                        for (Thread t : threads) t.join();
+
+                        System.out.println("------------------------------------------------------------");
+                        System.out.println("  Simulation Complete!");
+                        System.out.printf("  Successful Bookings : %d%n", BookingSimulator.getSuccessCount());
+                        System.out.printf("  Failed Bookings     : %d%n", BookingSimulator.getFailCount());
+                        System.out.println("------------------------------------------------------------");
                         break;
 
                     case 6:
