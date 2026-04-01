@@ -1,4 +1,6 @@
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -7,6 +9,26 @@ public class Main {
     // ── RoomType enum ──────────────────────────────
     enum RoomType {
         SINGLE, DOUBLE, SUITE, DELUXE, FAMILY
+    }
+
+    // ── AddOnService enum ──────────────────────────
+    enum AddOnService {
+        BREAKFAST(300, "Breakfast"),
+        AIRPORT_TRANSFER(500, "Airport Transfer"),
+        SPA(800, "Spa"),
+        LAUNDRY(200, "Laundry"),
+        PARKING(150, "Parking");
+
+        private final double price;
+        private final String displayName;
+
+        AddOnService(double price, String displayName) {
+            this.price       = price;
+            this.displayName = displayName;
+        }
+
+        public double getPrice()       { return price; }
+        public String getDisplayName() { return displayName; }
     }
 
     // ── Room class ─────────────────────────────────
@@ -83,39 +105,58 @@ public class Main {
         private String guestName;
         private Room assignedRoom;
         private int numberOfNights;
+        private List<AddOnService> addOns;
         private double totalCost;
 
         public Reservation(String guestName, Room room, int numberOfNights) {
-            this.reservationId   = "RES" + (++counter);
-            this.guestName       = guestName;
-            this.assignedRoom    = room;
-            this.numberOfNights  = numberOfNights;
-            this.totalCost       = numberOfNights * room.getPricePerNight();
+            this.reservationId  = "RES" + (++counter);
+            this.guestName      = guestName;
+            this.assignedRoom   = room;
+            this.numberOfNights = numberOfNights;
+            this.addOns         = new ArrayList<>();
+            this.totalCost      = numberOfNights * room.getPricePerNight();
         }
 
         public String getReservationId() { return reservationId; }
         public String getGuestName()     { return guestName; }
         public Room getAssignedRoom()    { return assignedRoom; }
-        public int getNumberOfNights()   { return numberOfNights; }
-        public double getTotalCost()     { return totalCost; }
+
+        public void addService(AddOnService service) {
+            addOns.add(service);
+            totalCost += service.getPrice();
+        }
+
+        public double getTotalCost() { return totalCost; }
 
         @Override
         public String toString() {
-            return String.format(
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format(
                     "  Reservation ID : %s%n" +
                             "  Guest Name     : %s%n" +
                             "  Room Number    : %s%n" +
                             "  Room Type      : %s%n" +
                             "  Nights         : %d%n" +
-                            "  Price/Night    : Rs.%.0f%n" +
-                            "  Total Cost     : Rs.%.0f",
+                            "  Price/Night    : Rs.%.0f%n",
                     reservationId,
                     guestName,
                     assignedRoom.getRoomNumber(),
                     assignedRoom.getRoomType(),
                     numberOfNights,
-                    assignedRoom.getPricePerNight(),
-                    totalCost);
+                    assignedRoom.getPricePerNight()));
+
+            if (!addOns.isEmpty()) {
+                sb.append("  Add-On Services:\n");
+                for (AddOnService s : addOns) {
+                    sb.append(String.format("    - %-20s Rs.%.0f%n",
+                            s.getDisplayName(), s.getPrice()));
+                }
+            } else {
+                sb.append("  Add-On Services : None\n");
+            }
+
+            sb.append(String.format("  Total Cost     : Rs.%.0f", totalCost));
+            return sb.toString();
         }
     }
 
@@ -130,40 +171,31 @@ public class Main {
         }
 
         public Reservation confirmBooking(String guestName, String roomNumber, int nights) {
-
-            // Validate guest name
             if (guestName == null || guestName.trim().isEmpty()) {
                 System.out.println("  ERROR: Guest name cannot be empty.");
                 return null;
             }
-
-            // Validate nights
             if (nights <= 0) {
                 System.out.println("  ERROR: Number of nights must be greater than 0.");
                 return null;
             }
-
-            // Check room exists
             Room room = inventory.getRoom(roomNumber);
             if (room == null) {
                 System.out.println("  ERROR: Room " + roomNumber + " does not exist.");
                 return null;
             }
-
-            // Check room availability
             if (!room.isAvailable()) {
                 System.out.println("  ERROR: Room " + roomNumber + " is not available.");
                 return null;
             }
-
-            // Allocate room
             room.setAvailable(false);
-
-            // Create reservation
             Reservation reservation = new Reservation(guestName, room, nights);
             reservations.put(reservation.getReservationId(), reservation);
-
             return reservation;
+        }
+
+        public Reservation getReservation(String reservationId) {
+            return reservations.get(reservationId);
         }
 
         public void displayAllReservations() {
@@ -179,27 +211,56 @@ public class Main {
         }
     }
 
+    // ── AddOnServiceManager class ──────────────────
+    static class AddOnServiceManager {
+
+        public void displayAvailableServices() {
+            System.out.println("------------------------------------------------------------");
+            System.out.printf("%-5s %-25s %-10s%n", "No.", "Service", "Price");
+            System.out.println("------------------------------------------------------------");
+            int i = 1;
+            for (AddOnService s : AddOnService.values()) {
+                System.out.printf("%-5d %-25s Rs.%.0f%n", i++, s.getDisplayName(), s.getPrice());
+            }
+            System.out.println("------------------------------------------------------------");
+        }
+
+        public void addServiceToReservation(Reservation reservation, int choice) {
+            AddOnService[] services = AddOnService.values();
+            if (choice < 1 || choice > services.length) {
+                System.out.println("  ERROR: Invalid service choice.");
+                return;
+            }
+            AddOnService selected = services[choice - 1];
+            reservation.addService(selected);
+            System.out.println("  Added: " + selected.getDisplayName() +
+                    " (Rs." + selected.getPrice() + ") to " +
+                    reservation.getReservationId());
+        }
+    }
+
     // ── Main Method ────────────────────────────────
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC6 - Reservation Confirmation &         ");
-        System.out.println("         Room Allocation                    ");
+        System.out.println("   UC7 - Add-On Service Selection           ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory   = new RoomInventory();
-        BookingService service    = new BookingService(inventory);
+        RoomInventory inventory       = new RoomInventory();
+        BookingService bookingService = new BookingService(inventory);
+        AddOnServiceManager addOnMgr  = new AddOnServiceManager();
 
         boolean running = true;
         while (running) {
-            System.out.println("\n--- Booking Menu ---");
+            System.out.println("\n--- Main Menu ---");
             System.out.println("1. View Available Rooms");
-            System.out.println("2. Confirm Booking & Allocate Room");
-            System.out.println("3. View All Reservations");
-            System.out.println("4. Exit");
+            System.out.println("2. Make a Booking");
+            System.out.println("3. Add Services to Reservation");
+            System.out.println("4. View All Reservations");
+            System.out.println("5. Exit");
             System.out.print("Enter your choice: ");
 
             int choice = scanner.nextInt();
@@ -222,11 +283,9 @@ public class Main {
                     int nights = scanner.nextInt();
                     scanner.nextLine();
 
-                    System.out.println("\n--- Processing Reservation ---");
-                    Reservation reservation = service.confirmBooking(guestName, roomNumber, nights);
-
+                    Reservation reservation = bookingService.confirmBooking(guestName, roomNumber, nights);
                     if (reservation != null) {
-                        System.out.println("\n  Reservation Confirmed!");
+                        System.out.println("\n  Booking Confirmed!");
                         System.out.println("--------------------------------------------");
                         System.out.println(reservation);
                         System.out.println("--------------------------------------------");
@@ -234,11 +293,43 @@ public class Main {
                     break;
 
                 case 3:
-                    System.out.println("\n--- All Reservations ---");
-                    service.displayAllReservations();
+                    System.out.print("Enter Reservation ID: ");
+                    String resId = scanner.nextLine();
+
+                    Reservation res = bookingService.getReservation(resId);
+                    if (res == null) {
+                        System.out.println("  ERROR: Reservation not found.");
+                        break;
+                    }
+
+                    boolean addingServices = true;
+                    while (addingServices) {
+                        System.out.println("\nAvailable Add-On Services:");
+                        addOnMgr.displayAvailableServices();
+                        System.out.println("0. Done adding services");
+                        System.out.print("Select service number: ");
+                        int serviceChoice = scanner.nextInt();
+                        scanner.nextLine();
+
+                        if (serviceChoice == 0) {
+                            addingServices = false;
+                        } else {
+                            addOnMgr.addServiceToReservation(res, serviceChoice);
+                        }
+                    }
+
+                    System.out.println("\nUpdated Reservation:");
+                    System.out.println("--------------------------------------------");
+                    System.out.println(res);
+                    System.out.println("--------------------------------------------");
                     break;
 
                 case 4:
+                    System.out.println("\n--- All Reservations ---");
+                    bookingService.displayAllReservations();
+                    break;
+
+                case 5:
                     System.out.println("\n  Thank you for using Book My Stay!");
                     System.out.println("============================================");
                     running = false;
