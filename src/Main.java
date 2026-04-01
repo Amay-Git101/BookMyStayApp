@@ -60,6 +60,10 @@ public class Main {
             return inventory;
         }
 
+        public Room getRoom(String roomNumber) {
+            return inventory.get(roomNumber);
+        }
+
         public void displayAvailableRooms() {
             System.out.println("------------------------------------------------------------");
             System.out.printf("%-8s %-10s %-15s %-15s%n",
@@ -74,56 +78,72 @@ public class Main {
         }
     }
 
-    // ── RoomSearchService class ────────────────────
-    static class RoomSearchService {
+    // ── BookingRequest class ───────────────────────
+    static class BookingRequest {
+        private String guestName;
+        private String roomNumber;
+        private int numberOfNights;
+        private double totalCost;
+
+        public BookingRequest(String guestName, String roomNumber, int numberOfNights, double pricePerNight) {
+            this.guestName      = guestName;
+            this.roomNumber     = roomNumber;
+            this.numberOfNights = numberOfNights;
+            this.totalCost      = numberOfNights * pricePerNight;
+        }
+
+        public String getGuestName()    { return guestName; }
+        public String getRoomNumber()   { return roomNumber; }
+        public int getNumberOfNights()  { return numberOfNights; }
+        public double getTotalCost()    { return totalCost; }
+
+        @Override
+        public String toString() {
+            return String.format(
+                    "  Guest      : %s%n" +
+                            "  Room       : %s%n" +
+                            "  Nights     : %d%n" +
+                            "  Total Cost : Rs.%.0f",
+                    guestName, roomNumber, numberOfNights, totalCost);
+        }
+    }
+
+    // ── BookingProcessor class ─────────────────────
+    static class BookingProcessor {
         private RoomInventory inventory;
 
-        public RoomSearchService(RoomInventory inventory) {
+        public BookingProcessor(RoomInventory inventory) {
             this.inventory = inventory;
         }
 
-        public void searchByRoomType(String typeInput) {
-            boolean found = false;
-            System.out.println("\n--- Search Results for Type: " + typeInput.toUpperCase() + " ---");
-            System.out.println("------------------------------------------------------------");
-            for (Room room : inventory.getInventory().values()) {
-                if (room.getRoomType().toString().equalsIgnoreCase(typeInput)
-                        && room.isAvailable()) {
-                    System.out.println(room);
-                    found = true;
-                }
-            }
-            if (!found) {
-                System.out.println("  No available rooms found for type: " + typeInput);
-            }
-            System.out.println("------------------------------------------------------------");
-        }
+        public BookingRequest processBooking(String guestName, String roomNumber, int nights) {
+            Room room = inventory.getRoom(roomNumber);
 
-        public void searchByMaxPrice(double maxPrice) {
-            boolean found = false;
-            System.out.println("\n--- Search Results for Max Price: Rs." + maxPrice + " ---");
-            System.out.println("------------------------------------------------------------");
-            for (Room room : inventory.getInventory().values()) {
-                if (room.getPricePerNight() <= maxPrice && room.isAvailable()) {
-                    System.out.println(room);
-                    found = true;
-                }
+            if (room == null) {
+                System.out.println("  ERROR: Room " + roomNumber + " does not exist.");
+                return null;
             }
-            if (!found) {
-                System.out.println("  No available rooms found under Rs." + maxPrice);
-            }
-            System.out.println("------------------------------------------------------------");
-        }
 
-        public void checkRoomAvailability(String roomNumber) {
-            Room room = inventory.getInventory().get(roomNumber);
-            System.out.println("\n--- Availability Check for Room: " + roomNumber + " ---");
-            if (room != null) {
-                System.out.println(room);
-            } else {
-                System.out.println("  Room " + roomNumber + " does not exist.");
+            if (!room.isAvailable()) {
+                System.out.println("  ERROR: Room " + roomNumber + " is not available.");
+                return null;
             }
-            System.out.println("------------------------------------------------------------");
+
+            if (guestName == null || guestName.trim().isEmpty()) {
+                System.out.println("  ERROR: Guest name cannot be empty.");
+                return null;
+            }
+
+            if (nights <= 0) {
+                System.out.println("  ERROR: Number of nights must be greater than 0.");
+                return null;
+            }
+
+            // Mark room as not available
+            room.setAvailable(false);
+
+            BookingRequest request = new BookingRequest(guestName, roomNumber, nights, room.getPricePerNight());
+            return request;
         }
     }
 
@@ -133,21 +153,19 @@ public class Main {
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC4 - Room Search & Availability Check   ");
+        System.out.println("   UC5 - Booking Request (Flow-Cross-Film)  ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory       = new RoomInventory();
-        RoomSearchService searchService = new RoomSearchService(inventory);
+        RoomInventory inventory        = new RoomInventory();
+        BookingProcessor processor     = new BookingProcessor(inventory);
 
         boolean running = true;
         while (running) {
-            System.out.println("\n--- Room Search Menu ---");
-            System.out.println("1. View All Available Rooms");
-            System.out.println("2. Search by Room Type");
-            System.out.println("3. Search by Max Price");
-            System.out.println("4. Check Room Availability by Room Number");
-            System.out.println("5. Exit");
+            System.out.println("\n--- Booking Menu ---");
+            System.out.println("1. View Available Rooms");
+            System.out.println("2. Make a Booking");
+            System.out.println("3. Exit");
             System.out.print("Enter your choice: ");
 
             int choice = scanner.nextInt();
@@ -155,29 +173,33 @@ public class Main {
 
             switch (choice) {
                 case 1:
-                    System.out.println("\nAll Available Rooms:");
+                    System.out.println("\nAvailable Rooms:");
                     inventory.displayAvailableRooms();
                     break;
 
                 case 2:
-                    System.out.print("Enter Room Type (SINGLE/DOUBLE/SUITE/DELUXE/FAMILY): ");
-                    String type = scanner.nextLine();
-                    searchService.searchByRoomType(type);
+                    System.out.print("Enter Guest Name: ");
+                    String guestName = scanner.nextLine();
+
+                    System.out.print("Enter Room Number: ");
+                    String roomNumber = scanner.nextLine();
+
+                    System.out.print("Enter Number of Nights: ");
+                    int nights = scanner.nextInt();
+                    scanner.nextLine();
+
+                    System.out.println("\n--- Processing Booking ---");
+                    BookingRequest request = processor.processBooking(guestName, roomNumber, nights);
+
+                    if (request != null) {
+                        System.out.println("  Booking Successful!");
+                        System.out.println("--------------------------------------------");
+                        System.out.println(request);
+                        System.out.println("--------------------------------------------");
+                    }
                     break;
 
                 case 3:
-                    System.out.print("Enter Maximum Price per Night (Rs.): ");
-                    double maxPrice = scanner.nextDouble();
-                    searchService.searchByMaxPrice(maxPrice);
-                    break;
-
-                case 4:
-                    System.out.print("Enter Room Number: ");
-                    String roomNum = scanner.nextLine();
-                    searchService.checkRoomAvailability(roomNum);
-                    break;
-
-                case 5:
                     System.out.println("\n  Thank you for using Book My Stay!");
                     System.out.println("============================================");
                     running = false;
