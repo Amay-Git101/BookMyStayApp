@@ -31,6 +31,43 @@ public class Main {
         public String getDisplayName() { return displayName; }
     }
 
+    // ── InputValidator class ───────────────────────
+    static class InputValidator {
+
+        public static void validateGuestName(String name) throws IllegalArgumentException {
+            if (name == null || name.trim().isEmpty()) {
+                throw new IllegalArgumentException("Guest name cannot be empty.");
+            }
+            if (name.trim().length() < 2) {
+                throw new IllegalArgumentException("Guest name must be at least 2 characters.");
+            }
+            if (!name.trim().matches("[a-zA-Z ]+")) {
+                throw new IllegalArgumentException("Guest name must contain letters only.");
+            }
+        }
+
+        public static void validateNights(int nights) throws IllegalArgumentException {
+            if (nights <= 0) {
+                throw new IllegalArgumentException("Number of nights must be greater than 0.");
+            }
+            if (nights > 365) {
+                throw new IllegalArgumentException("Number of nights cannot exceed 365.");
+            }
+        }
+
+        public static void validateRoomNumber(String roomNumber) throws IllegalArgumentException {
+            if (roomNumber == null || roomNumber.trim().isEmpty()) {
+                throw new IllegalArgumentException("Room number cannot be empty.");
+            }
+        }
+
+        public static void validateMenuChoice(int choice, int min, int max) throws IllegalArgumentException {
+            if (choice < min || choice > max) {
+                throw new IllegalArgumentException("Invalid choice. Please enter between " + min + " and " + max + ".");
+            }
+        }
+    }
+
     // ── Room class ─────────────────────────────────
     static class Room {
         private String roomNumber;
@@ -107,7 +144,7 @@ public class Main {
         private int numberOfNights;
         private List<AddOnService> addOns;
         private double totalCost;
-        private String status; // CONFIRMED, CANCELLED
+        private String status;
 
         public Reservation(String guestName, Room room, int numberOfNights) {
             this.reservationId  = "RES" + (++counter);
@@ -124,14 +161,13 @@ public class Main {
         public Room getAssignedRoom()    { return assignedRoom; }
         public int getNumberOfNights()   { return numberOfNights; }
         public String getStatus()        { return status; }
-        public void setStatus(String status) { this.status = status; }
+        public void setStatus(String s)  { this.status = s; }
+        public double getTotalCost()     { return totalCost; }
 
         public void addService(AddOnService service) {
             addOns.add(service);
             totalCost += service.getPrice();
         }
-
-        public double getTotalCost() { return totalCost; }
 
         @Override
         public String toString() {
@@ -177,24 +213,22 @@ public class Main {
             this.reservations = new HashMap<>();
         }
 
-        public Reservation confirmBooking(String guestName, String roomNumber, int nights) {
-            if (guestName == null || guestName.trim().isEmpty()) {
-                System.out.println("  ERROR: Guest name cannot be empty.");
-                return null;
-            }
-            if (nights <= 0) {
-                System.out.println("  ERROR: Number of nights must be greater than 0.");
-                return null;
-            }
+        public Reservation confirmBooking(String guestName, String roomNumber, int nights)
+                throws IllegalArgumentException {
+
+            // Validate inputs
+            InputValidator.validateGuestName(guestName);
+            InputValidator.validateNights(nights);
+            InputValidator.validateRoomNumber(roomNumber);
+
             Room room = inventory.getRoom(roomNumber);
             if (room == null) {
-                System.out.println("  ERROR: Room " + roomNumber + " does not exist.");
-                return null;
+                throw new IllegalArgumentException("Room " + roomNumber + " does not exist.");
             }
             if (!room.isAvailable()) {
-                System.out.println("  ERROR: Room " + roomNumber + " is not available.");
-                return null;
+                throw new IllegalArgumentException("Room " + roomNumber + " is not available.");
             }
+
             room.setAvailable(false);
             Reservation reservation = new Reservation(guestName, room, nights);
             reservations.put(reservation.getReservationId(), reservation);
@@ -222,87 +256,18 @@ public class Main {
         }
     }
 
-    // ── BookingReportService class ─────────────────
-    static class BookingReportService {
-        private BookingService bookingService;
-
-        public BookingReportService(BookingService bookingService) {
-            this.bookingService = bookingService;
-        }
-
-        public void generateFullReport() {
-            Map<String, Reservation> reservations = bookingService.getAllReservations();
-
-            System.out.println("============================================");
-            System.out.println("         BOOKING HISTORY & REPORT          ");
-            System.out.println("============================================");
-
-            if (reservations.isEmpty()) {
-                System.out.println("  No booking records found.");
-                return;
-            }
-
-            int totalBookings    = 0;
-            int confirmed        = 0;
-            int cancelled        = 0;
-            double totalRevenue  = 0;
-
-            for (Reservation r : reservations.values()) {
-                totalBookings++;
-                if (r.getStatus().equals("CONFIRMED")) {
-                    confirmed++;
-                    totalRevenue += r.getTotalCost();
-                } else {
-                    cancelled++;
-                }
-            }
-
-            System.out.println("------------------------------------------------------------");
-            System.out.printf("  %-25s : %d%n", "Total Bookings",   totalBookings);
-            System.out.printf("  %-25s : %d%n", "Confirmed",        confirmed);
-            System.out.printf("  %-25s : %d%n", "Cancelled",        cancelled);
-            System.out.printf("  %-25s : Rs.%.0f%n", "Total Revenue", totalRevenue);
-            System.out.println("------------------------------------------------------------");
-
-            System.out.println("\n  Booking Details:");
-            System.out.println("------------------------------------------------------------");
-            for (Reservation r : reservations.values()) {
-                System.out.println(r);
-                System.out.println("------------------------------------------------------------");
-            }
-        }
-
-        public void searchByGuestName(String name) {
-            System.out.println("\n--- Search Results for Guest: " + name + " ---");
-            System.out.println("------------------------------------------------------------");
-            boolean found = false;
-            for (Reservation r : bookingService.getAllReservations().values()) {
-                if (r.getGuestName().equalsIgnoreCase(name)) {
-                    System.out.println(r);
-                    System.out.println("------------------------------------------------------------");
-                    found = true;
-                }
-            }
-            if (!found) {
-                System.out.println("  No bookings found for guest: " + name);
-                System.out.println("------------------------------------------------------------");
-            }
-        }
-    }
-
     // ── Main Method ────────────────────────────────
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC8 - Booking History & Reporting        ");
+        System.out.println("   UC9 - Error Handling & Validation        ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory          = new RoomInventory();
-        BookingService bookingService    = new BookingService(inventory);
-        BookingReportService reportService = new BookingReportService(bookingService);
+        RoomInventory inventory       = new RoomInventory();
+        BookingService bookingService = new BookingService(inventory);
 
         boolean running = true;
         while (running) {
@@ -310,63 +275,63 @@ public class Main {
             System.out.println("1. View Available Rooms");
             System.out.println("2. Make a Booking");
             System.out.println("3. View All Reservations");
-            System.out.println("4. Generate Booking Report");
-            System.out.println("5. Search Booking by Guest Name");
-            System.out.println("6. Exit");
+            System.out.println("4. Exit");
             System.out.print("Enter your choice: ");
 
-            int choice = scanner.nextInt();
-            scanner.nextLine();
+            try {
+                int choice = Integer.parseInt(scanner.nextLine().trim());
+                InputValidator.validateMenuChoice(choice, 1, 4);
 
-            switch (choice) {
-                case 1:
-                    System.out.println("\nAvailable Rooms:");
-                    inventory.displayAvailableRooms();
-                    break;
+                switch (choice) {
+                    case 1:
+                        System.out.println("\nAvailable Rooms:");
+                        inventory.displayAvailableRooms();
+                        break;
 
-                case 2:
-                    System.out.print("Enter Guest Name: ");
-                    String guestName = scanner.nextLine();
+                    case 2:
+                        System.out.print("Enter Guest Name: ");
+                        String guestName = scanner.nextLine();
 
-                    System.out.print("Enter Room Number: ");
-                    String roomNumber = scanner.nextLine();
+                        System.out.print("Enter Room Number: ");
+                        String roomNumber = scanner.nextLine();
 
-                    System.out.print("Enter Number of Nights: ");
-                    int nights = scanner.nextInt();
-                    scanner.nextLine();
+                        System.out.print("Enter Number of Nights: ");
+                        int nights;
+                        try {
+                            nights = Integer.parseInt(scanner.nextLine().trim());
+                        } catch (NumberFormatException e) {
+                            System.out.println("  ERROR: Please enter a valid number for nights.");
+                            break;
+                        }
 
-                    Reservation reservation = bookingService.confirmBooking(guestName, roomNumber, nights);
-                    if (reservation != null) {
-                        System.out.println("\n  Booking Confirmed!");
-                        System.out.println("--------------------------------------------");
-                        System.out.println(reservation);
-                        System.out.println("--------------------------------------------");
-                    }
-                    break;
+                        try {
+                            Reservation reservation = bookingService.confirmBooking(
+                                    guestName, roomNumber, nights);
+                            System.out.println("\n  Booking Confirmed!");
+                            System.out.println("--------------------------------------------");
+                            System.out.println(reservation);
+                            System.out.println("--------------------------------------------");
+                        } catch (IllegalArgumentException e) {
+                            System.out.println("  ERROR: " + e.getMessage());
+                        }
+                        break;
 
-                case 3:
-                    System.out.println("\n--- All Reservations ---");
-                    bookingService.displayAllReservations();
-                    break;
+                    case 3:
+                        System.out.println("\n--- All Reservations ---");
+                        bookingService.displayAllReservations();
+                        break;
 
-                case 4:
-                    reportService.generateFullReport();
-                    break;
+                    case 4:
+                        System.out.println("\n  Thank you for using Book My Stay!");
+                        System.out.println("============================================");
+                        running = false;
+                        break;
+                }
 
-                case 5:
-                    System.out.print("Enter Guest Name to Search: ");
-                    String searchName = scanner.nextLine();
-                    reportService.searchByGuestName(searchName);
-                    break;
-
-                case 6:
-                    System.out.println("\n  Thank you for using Book My Stay!");
-                    System.out.println("============================================");
-                    running = false;
-                    break;
-
-                default:
-                    System.out.println("  Invalid choice. Please try again.");
+            } catch (NumberFormatException e) {
+                System.out.println("  ERROR: Please enter a valid number.");
+            } catch (IllegalArgumentException e) {
+                System.out.println("  ERROR: " + e.getMessage());
             }
         }
         scanner.close();
