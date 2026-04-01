@@ -2,7 +2,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
-public class UseCase4HotelBookingApp {
+public class Main {
 
     // ── RoomType enum ──────────────────────────────
     enum RoomType {
