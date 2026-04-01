@@ -56,9 +56,7 @@ public class Main {
             inventory.put(room.getRoomNumber(), room);
         }
 
-        public Map<String, Room> getInventory() {
-            return inventory;
-        }
+        public Map<String, Room> getInventory() { return inventory; }
 
         public Room getRoom(String roomNumber) {
             return inventory.get(roomNumber);
@@ -78,72 +76,106 @@ public class Main {
         }
     }
 
-    // ── BookingRequest class ───────────────────────
-    static class BookingRequest {
+    // ── Reservation class ──────────────────────────
+    static class Reservation {
+        private static int counter = 1000;
+        private String reservationId;
         private String guestName;
-        private String roomNumber;
+        private Room assignedRoom;
         private int numberOfNights;
         private double totalCost;
 
-        public BookingRequest(String guestName, String roomNumber, int numberOfNights, double pricePerNight) {
-            this.guestName      = guestName;
-            this.roomNumber     = roomNumber;
-            this.numberOfNights = numberOfNights;
-            this.totalCost      = numberOfNights * pricePerNight;
+        public Reservation(String guestName, Room room, int numberOfNights) {
+            this.reservationId   = "RES" + (++counter);
+            this.guestName       = guestName;
+            this.assignedRoom    = room;
+            this.numberOfNights  = numberOfNights;
+            this.totalCost       = numberOfNights * room.getPricePerNight();
         }
 
-        public String getGuestName()    { return guestName; }
-        public String getRoomNumber()   { return roomNumber; }
-        public int getNumberOfNights()  { return numberOfNights; }
-        public double getTotalCost()    { return totalCost; }
+        public String getReservationId() { return reservationId; }
+        public String getGuestName()     { return guestName; }
+        public Room getAssignedRoom()    { return assignedRoom; }
+        public int getNumberOfNights()   { return numberOfNights; }
+        public double getTotalCost()     { return totalCost; }
 
         @Override
         public String toString() {
             return String.format(
-                    "  Guest      : %s%n" +
-                            "  Room       : %s%n" +
-                            "  Nights     : %d%n" +
-                            "  Total Cost : Rs.%.0f",
-                    guestName, roomNumber, numberOfNights, totalCost);
+                    "  Reservation ID : %s%n" +
+                            "  Guest Name     : %s%n" +
+                            "  Room Number    : %s%n" +
+                            "  Room Type      : %s%n" +
+                            "  Nights         : %d%n" +
+                            "  Price/Night    : Rs.%.0f%n" +
+                            "  Total Cost     : Rs.%.0f",
+                    reservationId,
+                    guestName,
+                    assignedRoom.getRoomNumber(),
+                    assignedRoom.getRoomType(),
+                    numberOfNights,
+                    assignedRoom.getPricePerNight(),
+                    totalCost);
         }
     }
 
-    // ── BookingProcessor class ─────────────────────
-    static class BookingProcessor {
+    // ── BookingService class ───────────────────────
+    static class BookingService {
         private RoomInventory inventory;
+        private Map<String, Reservation> reservations;
 
-        public BookingProcessor(RoomInventory inventory) {
-            this.inventory = inventory;
+        public BookingService(RoomInventory inventory) {
+            this.inventory    = inventory;
+            this.reservations = new HashMap<>();
         }
 
-        public BookingRequest processBooking(String guestName, String roomNumber, int nights) {
-            Room room = inventory.getRoom(roomNumber);
+        public Reservation confirmBooking(String guestName, String roomNumber, int nights) {
 
-            if (room == null) {
-                System.out.println("  ERROR: Room " + roomNumber + " does not exist.");
-                return null;
-            }
-
-            if (!room.isAvailable()) {
-                System.out.println("  ERROR: Room " + roomNumber + " is not available.");
-                return null;
-            }
-
+            // Validate guest name
             if (guestName == null || guestName.trim().isEmpty()) {
                 System.out.println("  ERROR: Guest name cannot be empty.");
                 return null;
             }
 
+            // Validate nights
             if (nights <= 0) {
                 System.out.println("  ERROR: Number of nights must be greater than 0.");
                 return null;
             }
 
-            // Mark room as not available
+            // Check room exists
+            Room room = inventory.getRoom(roomNumber);
+            if (room == null) {
+                System.out.println("  ERROR: Room " + roomNumber + " does not exist.");
+                return null;
+            }
+
+            // Check room availability
+            if (!room.isAvailable()) {
+                System.out.println("  ERROR: Room " + roomNumber + " is not available.");
+                return null;
+            }
+
+            // Allocate room
             room.setAvailable(false);
 
-            BookingRequest request = new BookingRequest(guestName, roomNumber, nights, room.getPricePerNight());
-            return request;
+            // Create reservation
+            Reservation reservation = new Reservation(guestName, room, nights);
+            reservations.put(reservation.getReservationId(), reservation);
+
+            return reservation;
+        }
+
+        public void displayAllReservations() {
+            if (reservations.isEmpty()) {
+                System.out.println("  No reservations found.");
+                return;
+            }
+            System.out.println("------------------------------------------------------------");
+            for (Reservation r : reservations.values()) {
+                System.out.println(r);
+                System.out.println("------------------------------------------------------------");
+            }
         }
     }
 
@@ -153,19 +185,21 @@ public class Main {
 
         System.out.println("============================================");
         System.out.println("   Book My Stay                             ");
-        System.out.println("   UC5 - Booking Request (Flow-Cross-Film)  ");
+        System.out.println("   UC6 - Reservation Confirmation &         ");
+        System.out.println("         Room Allocation                    ");
         System.out.println("============================================");
         System.out.println();
 
-        RoomInventory inventory        = new RoomInventory();
-        BookingProcessor processor     = new BookingProcessor(inventory);
+        RoomInventory inventory   = new RoomInventory();
+        BookingService service    = new BookingService(inventory);
 
         boolean running = true;
         while (running) {
             System.out.println("\n--- Booking Menu ---");
             System.out.println("1. View Available Rooms");
-            System.out.println("2. Make a Booking");
-            System.out.println("3. Exit");
+            System.out.println("2. Confirm Booking & Allocate Room");
+            System.out.println("3. View All Reservations");
+            System.out.println("4. Exit");
             System.out.print("Enter your choice: ");
 
             int choice = scanner.nextInt();
@@ -188,18 +222,23 @@ public class Main {
                     int nights = scanner.nextInt();
                     scanner.nextLine();
 
-                    System.out.println("\n--- Processing Booking ---");
-                    BookingRequest request = processor.processBooking(guestName, roomNumber, nights);
+                    System.out.println("\n--- Processing Reservation ---");
+                    Reservation reservation = service.confirmBooking(guestName, roomNumber, nights);
 
-                    if (request != null) {
-                        System.out.println("  Booking Successful!");
+                    if (reservation != null) {
+                        System.out.println("\n  Reservation Confirmed!");
                         System.out.println("--------------------------------------------");
-                        System.out.println(request);
+                        System.out.println(reservation);
                         System.out.println("--------------------------------------------");
                     }
                     break;
 
                 case 3:
+                    System.out.println("\n--- All Reservations ---");
+                    service.displayAllReservations();
+                    break;
+
+                case 4:
                     System.out.println("\n  Thank you for using Book My Stay!");
                     System.out.println("============================================");
                     running = false;
